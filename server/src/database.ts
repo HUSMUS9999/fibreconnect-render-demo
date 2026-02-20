@@ -264,6 +264,8 @@ async function initPostgres(): Promise<void> {
 
   const existingAdmin = await db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('super_admin');
   if (!existingAdmin) await seedData();
+
+  await seedDemoInterventionsIfEmpty();
 }
 
 async function initSqlite(): Promise<void> {
@@ -442,6 +444,243 @@ async function initSqlite(): Promise<void> {
   const existingAdmin = dbi.prepare('SELECT id FROM users WHERE role = ?').get('super_admin');
   if (!existingAdmin) {
     await seedData();
+  }
+
+  await seedDemoInterventionsIfEmpty();
+}
+
+async function seedDemoInterventionsIfEmpty(): Promise<void> {
+  const dbi = getDb();
+  const existing: any = await dbi.prepare('SELECT COUNT(*) as c FROM interventions').get();
+  const count = Number(existing?.c || 0);
+  if (count > 0) return;
+
+  const { v4: uuid } = require('uuid');
+
+  const now = new Date();
+  const iso = (d: Date) => d.toISOString();
+  const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+  const addDays = (base: Date, days: number) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + days);
+    return d;
+  };
+
+  // Resolve demo clients by email
+  const clientFR: any = await dbi.prepare('SELECT id FROM clients WHERE email = ?').get('marie.durand@email.com');
+  const clientDE: any = await dbi.prepare('SELECT id FROM clients WHERE email = ?').get('anna@techcorp.de');
+  const clientBE: any = await dbi.prepare('SELECT id FROM clients WHERE email = ?').get('louis.lambert@email.be');
+  const clientLU: any = await dbi.prepare('SELECT id FROM clients WHERE email = ?').get('emma@luxfibre.lu');
+
+  // Resolve demo techs by email
+  const techParis: any = await dbi.prepare('SELECT id FROM users WHERE email = ?').get('tech1.paris@fibre.com');
+  const techVersailles: any = await dbi.prepare('SELECT id FROM users WHERE email = ?').get('tech2.paris@fibre.com');
+  const techMunich: any = await dbi.prepare('SELECT id FROM users WHERE email = ?').get('tech.munich@fibre.com');
+  const techBruxelles: any = await dbi.prepare('SELECT id FROM users WHERE email = ?').get('tech.bruxelles@fibre.com');
+  const techLux: any = await dbi.prepare('SELECT id FROM users WHERE email = ?').get('tech.lux@fibre.com');
+
+  const admin: any = await dbi.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('super_admin');
+  const createdBy = admin?.id || null;
+
+  const mk = (p: {
+    reference: string;
+    type: string;
+    description: string;
+    client_id: string | null;
+    technician_id: string | null;
+    address: string;
+    city: string;
+    postal_code: string;
+    country: string;
+    latitude: number;
+    longitude: number;
+    priority: string;
+    status: string;
+    scheduled: { date: string; start: string; end: string } | null;
+    planning_mode: 'auto' | 'manual';
+    planning_score?: number | null;
+    deadline: string;
+  }) => p;
+
+  const demo = [
+    mk({
+      reference: 'INT-FR-00001',
+      type: 'installation_fibre',
+      description: 'Installation FTTH - client résidentiel (démo)',
+      client_id: clientFR?.id || null,
+      technician_id: techParis?.id || null,
+      address: '15 Rue de Rivoli',
+      city: 'Paris',
+      postal_code: '75001',
+      country: 'FR',
+      latitude: 48.8566,
+      longitude: 2.3522,
+      priority: 'critique',
+      status: 'planifiee_auto',
+      scheduled: { date: dateOnly(addDays(now, 1)), start: '09:00', end: '11:00' },
+      planning_mode: 'auto',
+      planning_score: 92.4,
+      deadline: iso(addDays(now, 2)),
+    }),
+    mk({
+      reference: 'INT-FR-00002',
+      type: 'depannage',
+      description: 'Dépannage - perte de signal (démo)',
+      client_id: clientFR?.id || null,
+      technician_id: techVersailles?.id || null,
+      address: '10 Avenue de Paris',
+      city: 'Versailles',
+      postal_code: '78000',
+      country: 'FR',
+      latitude: 48.8049,
+      longitude: 2.1204,
+      priority: 'haute',
+      status: 'en_retard',
+      scheduled: { date: dateOnly(addDays(now, -2)), start: '08:00', end: '09:30' },
+      planning_mode: 'auto',
+      planning_score: 78.1,
+      deadline: iso(addDays(now, -1)),
+    }),
+    mk({
+      reference: 'INT-DE-00001',
+      type: 'maintenance',
+      description: 'Maintenance préventive - boîtier optique (démo)',
+      client_id: clientDE?.id || null,
+      technician_id: techMunich?.id || null,
+      address: 'Marienplatz 1',
+      city: 'München',
+      postal_code: '80331',
+      country: 'DE',
+      latitude: 48.1372,
+      longitude: 11.5756,
+      priority: 'normale',
+      status: 'confirmee',
+      scheduled: { date: dateOnly(addDays(now, 3)), start: '10:00', end: '11:00' },
+      planning_mode: 'auto',
+      planning_score: 85.0,
+      deadline: iso(addDays(now, 5)),
+    }),
+    mk({
+      reference: 'INT-BE-00001',
+      type: 'raccordement',
+      description: 'Raccordement - nouvelle ligne (démo)',
+      client_id: clientBE?.id || null,
+      technician_id: techBruxelles?.id || null,
+      address: 'Rue Neuve 1',
+      city: 'Bruxelles',
+      postal_code: '1000',
+      country: 'BE',
+      latitude: 50.8503,
+      longitude: 4.3517,
+      priority: 'basse',
+      status: 'planifiee_auto',
+      scheduled: { date: dateOnly(addDays(now, 2)), start: '14:00', end: '15:30' },
+      planning_mode: 'auto',
+      planning_score: 81.7,
+      deadline: iso(addDays(now, 6)),
+    }),
+    mk({
+      reference: 'INT-LU-00001',
+      type: 'soudure',
+      description: 'Soudure fibre - réparation (démo)',
+      client_id: clientLU?.id || null,
+      technician_id: techLux?.id || null,
+      address: '1 Avenue de la Gare',
+      city: 'Luxembourg',
+      postal_code: '1611',
+      country: 'LU',
+      latitude: 49.6116,
+      longitude: 6.1319,
+      priority: 'haute',
+      status: 'en_cours',
+      scheduled: { date: dateOnly(now), start: '08:00', end: '10:00' },
+      planning_mode: 'auto',
+      planning_score: 88.2,
+      deadline: iso(addDays(now, 1)),
+    }),
+  ];
+
+  for (const d of demo) {
+    const id = uuid();
+    const clientToken = uuid();
+    const tokenExpires = iso(addDays(now, 30));
+
+    await dbi.prepare(`INSERT INTO interventions (
+      id, reference, type, description, client_id, technician_id,
+      address, city, postal_code, country, latitude, longitude,
+      priority, status, sla_hours, deadline,
+      scheduled_date, scheduled_start_time, scheduled_end_time,
+      planning_mode, planning_score,
+      client_token, client_token_expires,
+      created_by, created_at, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?,
+      ?, ?,
+      ?, ?, ?
+    )`).run(
+      id,
+      d.reference,
+      d.type,
+      d.description,
+      d.client_id,
+      d.technician_id,
+      d.address,
+      d.city,
+      d.postal_code,
+      d.country,
+      d.latitude,
+      d.longitude,
+      d.priority,
+      d.status,
+      d.priority === 'critique' ? 4 : d.priority === 'haute' ? 24 : d.priority === 'normale' ? 48 : 72,
+      d.deadline,
+      d.scheduled?.date || null,
+      d.scheduled?.start || null,
+      d.scheduled?.end || null,
+      d.planning_mode,
+      d.planning_score ?? null,
+      clientToken,
+      tokenExpires,
+      createdBy,
+      iso(addDays(now, -7)),
+      iso(now)
+    );
+
+    // schedule entry
+    if (d.technician_id && d.scheduled) {
+      await dbi.prepare(`INSERT INTO technician_schedule (id, technician_id, date, start_time, end_time, intervention_id)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(
+        uuid(), d.technician_id, d.scheduled.date, d.scheduled.start, d.scheduled.end, id
+      );
+    }
+
+    // history
+    await dbi.prepare(`INSERT INTO intervention_history (id, intervention_id, action, new_value, performed_by, performed_by_role, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+      uuid(), id, 'creation', d.status, createdBy || 'system', createdBy ? 'super_admin' : 'system', 'Création (démo)'
+    );
+
+    if (d.status === 'planifiee_auto') {
+      await dbi.prepare(`INSERT INTO intervention_history (id, intervention_id, action, new_value, performed_by, performed_by_role, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+        uuid(), id, 'planification_auto', 'planifiee_auto', 'system', 'system', 'Planification automatique (démo)'
+      );
+    }
+
+    if (d.status === 'en_retard') {
+      await dbi.prepare(`INSERT INTO sla_violations (id, intervention_id, violation_type, expected_time, actual_time, country)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(
+        uuid(), id, 'deadline_depassee', d.deadline, iso(now), d.country
+      );
+      await dbi.prepare(`INSERT INTO intervention_history (id, intervention_id, action, new_value, performed_by, performed_by_role, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+        uuid(), id, 'sla_violation', 'en_retard', 'system', 'system', `Dépassement SLA détecté (démo). Deadline: ${d.deadline}`
+      );
+    }
   }
 }
 

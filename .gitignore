@@ -16,3 +16,5 @@ server/uploads/
 *.log
 
 *.png
+
+.tmp/
